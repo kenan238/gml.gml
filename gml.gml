@@ -443,9 +443,6 @@ function gmlStringConsumer(str) constructor
         {
             self.column = 0;
             self.line++;
-            
-            if (self.line % 20 == 0)
-            	trace("LINE=",self.line)
         }
         
         if (self.ReadingTempBuffer() && !self.CanRead())
@@ -1098,7 +1095,7 @@ function gmlStructNode(struct) : gmlNode() constructor
             var v = gml_vm_expr(self.data[$ key], struct_ctx);
             
             // assign function to this struct
-            gml_vm_func_handle_self_scope(v, struct_ctx.scope, struct_ctx.scope_other)
+            gml_vm_func_bind_selfscope(v, struct_ctx.scope)
             
             flat[$ key] = v
         }
@@ -1113,7 +1110,6 @@ function gmlVarNode(name) : gmlNode() constructor
 	static Fold = function ()
 	{
 		var builtin = gml_vm_builtin(self.name)
-		trace($"self.name={self.name}, gml_vm_builtin.found={gml_vm_builtin.found}")
 		if gml_vm_builtin.found
 			return new gmlLeafNode(builtin)
 		
@@ -1178,7 +1174,7 @@ function gmlAccessNode(node, index, how) : gmlNode() constructor
     {
     	__gml_profile("Access")
     	__gml_vm_access_checklegal(root, ctx)
-    	gml_vm_func_handle_self_scope(root, value, ctx.scope)
+    	gml_vm_func_bind_selfscope(root, value)
     	var f = node.setfunc // cuz dot notation changes scope..
     	var r = f(value, ctx)
     	__gml_endprofile("Access")
@@ -1189,13 +1185,17 @@ function gmlAccessNode(node, index, how) : gmlNode() constructor
     static Fold = function ()
     {
     	self.node = self.node.Fold();
-    	if !is_array(self.index)
-    		self.index = self.index.Fold();
-    	else
-    		self.index = array_map(self.index, function (el)
-    		{
-    			return el.Fold();
-    		})
+    	
+    	if !is_string(self.index)
+    	{
+	    	if !is_array(self.index)
+	    		self.index = self.index.Fold();
+	    	else
+	    		self.index = array_map(self.index, function (el)
+	    		{
+	    			return el.Fold();
+	    		})
+    	}
     		
     	return self;
     }
@@ -1280,7 +1280,7 @@ function gmlFunctionNode(name, arg_names, block, is_constructor, inherit_call = 
                 ctx.script.SetFunc(self.name, __gml_method_real(new_meta, fn));
             }
             else // bind it to the parent constructor
-                gml_vm_func_handle_self_scope(fn, ctx.scope, ctx.scope_other)
+                gml_vm_func_bind_selfscope(fn, ctx.scope)
             
             ctx.SetVar(self.name, fn, ctx.scope);
         }
@@ -1665,7 +1665,7 @@ function gmlLValueStatementNode(left, right, kind) : gmlNode() constructor
 function gmlForStatementNode(parts, blk) : gmlNode() constructor
 {
 	if array_length(parts) != 3
-		show_error("Invalid gmlForStatementNode created", true)
+		throw "Invalid gmlForStatementNode created"
 		
 	self.parts = parts
 	self.block = blk
@@ -2150,11 +2150,13 @@ function gml_parse_expr_leaf_node_primary(tokens)
         if !is_construct && !is_undefined(inherit_call)
             throw "Can't inherit on a non-constructor function"
         
+        __gml.gml_scopedepth ++;
 		var blk = gml_parse_block(tokens);
+		__gml.gml_scopedepth --;
 		
 		var node = new gmlFunctionNode(name, arg_names, blk, is_construct, inherit_call, arg_optionals)
 		
-		if (string_length(name) > 0)
+		if (string_length(name) > 0 && __gml.gml_scopedepth == 0)
 			__gml.gml_functions[$ name] = node;
 			
 		return node;
@@ -2166,7 +2168,7 @@ function gml_parse_expr_leaf_node_primary(tokens)
 		gml_consume(tokens)
 		var s = gml_parse_expr_ops(tokens)
 		if gml_consume(tokens)[0] != token_type.close_paren
-			show_error("Invalid leaf close_paren not here", true)
+			throw "Open parenthesis must be closed."
 			
 		return s;
 	}
@@ -5162,7 +5164,7 @@ function gmlVMContext(script, instance, inst_other, gmfunc = "<gml.gml>") constr
     self.script = script;
     self.scope = instance
     
-    if !instance_exists(instance) && !is_struct(instance)
+    if !__gml_vm_is_valid_scope(instance)
     	throw "Invalid self.scope"
     
     self.scope_other = inst_other;
@@ -5218,7 +5220,7 @@ function gmlVMContext(script, instance, inst_other, gmfunc = "<gml.gml>") constr
     
     static SetVar = function (n, v, location_scope = undefined)
     {
-        gml_vm_func_handle_self_scope(v, self.scope, self.scope_other)
+        gml_vm_func_bind_selfscope(v, self.scope)
         
         // try assign to requested scope, else try find scope, and if it's nowhere default to the current scope
         location_scope = location_scope ?? FindVarScope(n) ?? self.scope;
@@ -5395,7 +5397,7 @@ function __gml_vm_get_dot(ctx)
     else
     	val = variable_instance_get(root, varname);
     	
-    if is_method(val) && (instance_exists(root) || is_struct(root))
+    if is_method(val) && __gml_vm_is_valid_scope(root)
     {
     	val = method(root, val)
     }
@@ -5548,18 +5550,18 @@ function __gml_vm_is_valid_scope(scope)
 	return is_struct(scope) || instance_exists(scope)
 }
 
-function gml_vm_func_handle_self_scope(func, scope, scope_other)
+function gml_vm_func_bind_selfscope(func, scope)
 {
     if is_method(func) && __gml_vm_is_valid_scope(scope)
     {
         var meth_self = __gml_method_get_self_real(func);
         
         if is_struct(meth_self) && struct_exists(meth_self, gml_func_sig) && !meth_self.scopes_filled
-            gml_vm_func_setscope(meth_self, scope, scope_other)
+            gml_vm_func_setscope(meth_self, scope)
     }
 }
 
-function gml_vm_func_setscope(fn_self, __self, __other)
+function gml_vm_func_setscope(fn_self, __self)
 {
     fn_self.scopes_filled = true;
     fn_self._self = __self;
@@ -5647,7 +5649,7 @@ function __gml_vm_fun(callinfo)
         // argument handling
         var arg_count = argument_count - arg_offset
         
-        // argument is not a real array
+        // argument is not a real array ????
         var argument_array = []
         for (var i = 0; i < arg_count; i++)
             argument_array[i] = argument[i + arg_offset];
@@ -5687,16 +5689,13 @@ function __gml_vm_fun(callinfo)
             line: -1,
             column: 0
         };
-        trace($"error={error}")
+        
         if !is_string(error)
             error = error.message;
         
         trace($"gml_run function {fn_meta.name}: runtime error at line {last_pos.line} column {last_pos.column}: {error}")
         
-        return {
-        	pos: last_pos,
-        	error
-        }
+        return new gmlError(last_pos, error)
     }
 }
 
@@ -5891,9 +5890,15 @@ function gml_test(name, code, expected)
     }
 }
 
+function gmlError(error, pos) constructor
+{
+	self.error = error;
+	self.pos = pos;
+}
+
 function gml_is_error(returned)
 {
-    return is_struct(returned) && struct_exists(returned, "error")
+    return is_instanceof(returned, gmlError)
 }
 
 function gml_parse(code)
@@ -5905,6 +5910,7 @@ function gml_parse(code)
     {
         __gml.gml_enums = {}
         __gml.gml_functions = {}
+        __gml.gml_scopedepth = 0;
         
         var AST = gml_parse_block(tokens, true).Fold()
     }
@@ -5913,10 +5919,7 @@ function gml_parse(code)
         var last_pos = tokens.next_token[2]
         trace($"gml_run: compile error at line {last_pos.line} column {last_pos.column}: {error}")
         
-        return {
-            pos: last_pos,
-            error,
-        };
+        return new gmlError(last_pos, error);
     }
     finally
     {
@@ -5954,19 +5957,14 @@ function gml_vm(AST, _script = undefined, _self = self, _other = other)
             line: -1,
             column: 0
         };
-        
-        trace("error=",error)
-        
+        trace(error)
         if !is_string(error)
             error = error.message;
         
         trace($"gml_run: runtime error at line {last_pos.line} column {last_pos.column}: {error}")
         
         is_running = false;
-        return {
-            pos: last_pos,
-            error,
-        };
+        return new gmlError(last_pos, error);
     }
 }; gml_vm.is_running = false;
 
