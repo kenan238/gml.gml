@@ -2015,7 +2015,7 @@ function gml_parse_expr_leaf_node_primary(tokens)
 		{
 			var s = gml_parse_expr_ops(tokens)
 			if tokens.next_token[0] != token_type.comma && tokens.next_token[0] != token_type.close_bracket
-				show_error("im lost in the array", true)
+				throw "Invalid array syntax (expected a comma or a closing bracket for array end)"
 			else if tokens.next_token[0] != token_type.close_bracket
 				gml_consume(tokens); // consume ,
 				
