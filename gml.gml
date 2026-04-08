@@ -1777,45 +1777,28 @@ function gmlTryStatementNode(try_block, catch_block, catch_param_name = undefine
     {
     	var tryblk = self.try_block, catchblk = self.catch_block, catch_parname = self.catch_param_name;
         
-        if is_undefined(catchblk)
+        try
         {
-            try
+            var k = gml_vm_block(tryblk, ctx)
+            if !is_undefined(k)
+            	return k;
+        }
+        catch (err)
+        {
+            if !is_undefined(self.catch_block)
             {
-                var k = gml_vm_block(tryblk, ctx)
-                if !is_undefined(k)
-                	return k;
-            }
-            catch (_)
-            {
-            	// not putting this breaks something somehow
-            }
-            finally
-            {
-            	var k = self.TryRunFinally(ctx)
-            	if !is_undefined(k) throw "Can't use break, continue, exit, return in finally."
+            	if !is_undefined(catch_parname)
+	                ctx.SetVar(catch_parname, err, ctx.locals)
+	            
+	            var k = gml_vm_block(catchblk, ctx)
+	            if !is_undefined(k)
+	            	return k;
             }
         }
-        else {
-        	try
-            {
-                var k = gml_vm_block(tryblk, ctx)
-                if !is_undefined(k)
-                	return k;
-            }
-            catch (err)
-            {
-                if !is_undefined(catch_parname)
-                    ctx.SetVar(catch_parname, err, ctx.locals)
-                
-                var k = gml_vm_block(catchblk, ctx)
-                if !is_undefined(k)
-                	return k;
-            }
-            finally
-            {
-            	var k = self.TryRunFinally(ctx)
-            	if !is_undefined(k) throw "Can't use break, continue, exit, return in finally."
-            }
+        finally
+        {
+        	var k = self.TryRunFinally(ctx)
+        	if !is_undefined(k) throw "Can't use break, continue, exit, return in finally."
         }
     }
 }
