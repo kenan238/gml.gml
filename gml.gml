@@ -262,6 +262,7 @@ enum token_type
     k_do,
     k_until,
     k_globalvar,
+    k_finally,
     k_then, 
     k_delete, 
 	
@@ -929,6 +930,7 @@ function gmlTokenizer(consumer) constructor
 					case "until": self.Push([token_type.k_until]); break;
 					case "enum": self.Push([token_type.k_enum]); break;
 					case "globalvar": self.Push([token_type.k_globalvar]); break;
+					case "finally": self.Push([token_type.k_finally]); break;
 	                
 					default:
 						self.Push([token_type.symbol, symb]);
@@ -1748,11 +1750,12 @@ function gmlRepeatStatementNode(times, blk) : gmlNode() constructor
     }
 }
 
-function gmlTryStatementNode(try_block, catch_block, catch_param_name = undefined) : gmlNode() constructor
+function gmlTryStatementNode(try_block, catch_block, catch_param_name = undefined, finally_block = undefined) : gmlNode() constructor
 {
     self.try_block = try_block
     self.catch_block = catch_block
     self.catch_param_name = catch_param_name
+    self.finally_block = finally_block
     
     static Fold = function ()
     {
@@ -1762,6 +1765,12 @@ function gmlTryStatementNode(try_block, catch_block, catch_param_name = undefine
     		self.catch_block = self.catch_block.Fold();
     		
     	return self;
+    }
+    
+    static TryRunFinally = function (ctx)
+    {
+    	if !is_undefined(self.finally_block)
+    		return gml_vm_block(self.finally_block, ctx)
     }
     
     static Execute = function (ctx)
@@ -1780,6 +1789,11 @@ function gmlTryStatementNode(try_block, catch_block, catch_param_name = undefine
             {
             	// not putting this breaks something somehow
             }
+            finally
+            {
+            	var k = self.TryRunFinally(ctx)
+            	if !is_undefined(k) throw "Can't use break, continue, exit, return in finally."
+            }
         }
         else {
         	try
@@ -1796,6 +1810,11 @@ function gmlTryStatementNode(try_block, catch_block, catch_param_name = undefine
                 var k = gml_vm_block(catchblk, ctx)
                 if !is_undefined(k)
                 	return k;
+            }
+            finally
+            {
+            	var k = self.TryRunFinally(ctx)
+            	if !is_undefined(k) throw "Can't use break, continue, exit, return in finally."
             }
         }
     }
@@ -2619,7 +2638,7 @@ function gml_parse_statement(tokens)
         gml_consume(tokens)
         
         var tryblk = gml_parse_block(tokens);
-        var catchblk = undefined;
+        var catchblk = undefined, finallyblk = undefined;
         var catchparam = undefined
         
         if tokens.next_token[0] == token_type.k_catch
@@ -2636,7 +2655,14 @@ function gml_parse_statement(tokens)
             catchblk = gml_parse_block(tokens)
         }
         
-        return new gmlTryStatementNode(tryblk, catchblk, catchparam)
+        if tokens.next_token[0] == token_type.k_finally
+        {
+            gml_consume(tokens) // finally
+            
+            finallyblk = gml_parse_block(tokens)
+        }
+        
+        return new gmlTryStatementNode(tryblk, catchblk, catchparam, finallyblk)
         
     case token_type.k_repeat:
         gml_consume(tokens)
@@ -5936,6 +5962,7 @@ function gml_vm(AST, _script = undefined, _self = self, _other = other)
 	_script ??= new gmlVMScript()
     var ctx = new gmlVMContext(_script, _self, _other)
     
+    // define top level functions
     var funcnames = struct_get_names(AST.functions)
     for (var i = 0; i < array_length(funcnames); i++)
     {
@@ -5957,7 +5984,7 @@ function gml_vm(AST, _script = undefined, _self = self, _other = other)
             line: -1,
             column: 0
         };
-        trace(error)
+        
         if !is_string(error)
             error = error.message;
         
