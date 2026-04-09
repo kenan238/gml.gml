@@ -1213,11 +1213,6 @@ function gmlAccessNode(node, index, how) : gmlNode() constructor
 }
 function gmlFunctionNode(name, arg_names, block, is_constructor, inherit_call = undefined, arg_optionals = {}) : gmlNode() constructor
 {
-	static SetID = function (_id)
-	{
-		self.id = _id
-	}
-	
     self.name = name;
 	self.arg_names = arg_names
     self.arg_optionals = arg_optionals
@@ -1247,10 +1242,6 @@ function gmlFunctionNode(name, arg_names, block, is_constructor, inherit_call = 
     
     static Execute = function (ctx)
     {
-    	// already defined
-    	if ctx.HasFunc(self.name)
-    		return ctx.GetFunc(self.name)
-    	
         var func_meta = {
             is_constructor: self.is_constructor,
             
@@ -1275,7 +1266,9 @@ function gmlFunctionNode(name, arg_names, block, is_constructor, inherit_call = 
         func_meta[$ gml_func_sig] = true;
         func_meta.fn = fn;
         
-        if string_length(self.name) > 0
+        // do not re-run this piece of code for functions that have been preinited as top level ones
+        // probably make this not run at all? idk
+        if string_length(self.name) > 0 && !ctx.HasFunc(self.name)
         {
             if !ctx.in_constructor
             {
@@ -1283,7 +1276,6 @@ function gmlFunctionNode(name, arg_names, block, is_constructor, inherit_call = 
                 var new_meta = {}
                 gml_util_struct_copy(func_meta, new_meta)
                 gml_vm_func_clearscope(new_meta)
-                
                 ctx.SetFunc(self.name, __gml_method_real(new_meta, fn));
             }
             else // bind it to the parent constructor
@@ -5416,7 +5408,7 @@ function __gml_vm_get_dot(ctx)
     else
     	val = variable_instance_get(root, varname);
     	
-    if is_method(val) && __gml_vm_is_valid_scope(root)
+    if is_method(val) && method_get_self(root) == undefined && __gml_vm_is_valid_scope(root)
     {
     	val = method(root, val)
     }
