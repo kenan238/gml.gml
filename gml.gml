@@ -1627,11 +1627,45 @@ function gmlExprStatementNode(expr) : gmlNode() constructor
     }
 }
 
+function __gml_lvalue_op_minusequal(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) - rhs, ctx); }
+function __gml_lvalue_op_plusequal(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) + rhs, ctx); }
+function __gml_lvalue_op_timesequal(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) * rhs, ctx); }
+function __gml_lvalue_op_divideequal(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) / rhs, ctx); }
+function __gml_lvalue_op_orequal(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) | rhs, ctx); }
+function __gml_lvalue_op_andequal(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) & rhs, ctx); }
+function __gml_lvalue_op_xorequal(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) ^ rhs, ctx); }
+function __gml_lvalue_op_moduloequal(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) % rhs, ctx); }
+
+function __gml_lvalue_op_equal(lhs, rhs, ctx) { lhs.Set(rhs, ctx); }
+function __gml_lvalue_op_null(lhs, rhs, ctx) { lhs.Set(lhs.Get(ctx) ?? rhs, ctx); }
+
+function __gml_lvalue_get_op(kind)
+{
+	switch (kind)
+	{
+		case token_type.minus_equal: return __gml_lvalue_op_minusequal;
+		case token_type.plus_equal: return __gml_lvalue_op_plusequal;
+		case token_type.times_equal: return __gml_lvalue_op_timesequal;
+		case token_type.divide_equal: return __gml_lvalue_op_divideequal;
+		case token_type.or_equal: return __gml_lvalue_op_orequal;
+		case token_type.and_equal: return __gml_lvalue_op_andequal;
+		case token_type.xor_equal: return __gml_lvalue_op_xorequal;
+		case token_type.modulo_equal: return __gml_lvalue_op_moduloequal;
+		
+		case token_type.equal: return __gml_lvalue_op_equal;
+		case token_type.nullcoalesce_equal: return __gml_lvalue_op_null;
+		
+		default: throw $"__gml_lvalue_get_op unknown operator {kind}"
+	}
+}
+
 function gmlLValueStatementNode(left, right, kind) : gmlNode() constructor
 {
 	self.left = left;
 	self.right = right;
 	self.kind = kind;
+	
+	self.func = __gml_lvalue_get_op(self.kind)
 	
 	static Fold = function ()
 	{
@@ -1643,21 +1677,9 @@ function gmlLValueStatementNode(left, right, kind) : gmlNode() constructor
 	
 	static Execute = function (ctx)
 	{
-		var type = self.kind, lhs = gml_vm_expr_lvalue(self.left, ctx), rhs = gml_vm_expr(self.right, ctx);
+		var lhs = gml_vm_expr_lvalue(self.left, ctx), rhs = gml_vm_expr(self.right, ctx);
     	
-        switch (type)
-        {
-        case token_type.equal: lhs.Set(rhs, ctx); break;
-        case token_type.minus_equal: lhs.Set(lhs.Get(ctx) - rhs, ctx); break;
-        case token_type.plus_equal: lhs.Set(lhs.Get(ctx) + rhs, ctx); break;
-        case token_type.times_equal: lhs.Set(lhs.Get(ctx) * rhs, ctx); break;
-        case token_type.divide_equal: lhs.Set(lhs.Get(ctx) / rhs, ctx); break;
-        case token_type.nullcoalesce_equal: lhs.Set(lhs.Get(ctx) ?? rhs, ctx); break;
-        case token_type.or_equal: lhs.Set(lhs.Get(ctx) | rhs, ctx); break;
-        case token_type.and_equal: lhs.Set(lhs.Get(ctx) & rhs, ctx); break;
-        case token_type.xor_equal: lhs.Set(lhs.Get(ctx) ^ rhs, ctx); break;
-        case token_type.modulo_equal: lhs.Set(lhs.Get(ctx) % rhs, ctx); break;
-        }
+    	return self.func(lhs, rhs, ctx)
 	}
 }
 
