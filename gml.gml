@@ -1213,6 +1213,11 @@ function gmlAccessNode(node, index, how) : gmlNode() constructor
 }
 function gmlFunctionNode(name, arg_names, block, is_constructor, inherit_call = undefined, arg_optionals = {}) : gmlNode() constructor
 {
+	static SetID = function (_id)
+	{
+		self.id = _id
+	}
+	
     self.name = name;
 	self.arg_names = arg_names
     self.arg_optionals = arg_optionals
@@ -1243,8 +1248,8 @@ function gmlFunctionNode(name, arg_names, block, is_constructor, inherit_call = 
     static Execute = function (ctx)
     {
     	// already defined
-    	if ctx.script.HasFunc(self.name)
-    		return ctx.script.GetFunc(self.name)
+    	if ctx.HasFunc(self.name)
+    		return ctx.GetFunc(self.name)
     	
         var func_meta = {
             is_constructor: self.is_constructor,
@@ -1279,7 +1284,7 @@ function gmlFunctionNode(name, arg_names, block, is_constructor, inherit_call = 
                 gml_util_struct_copy(func_meta, new_meta)
                 gml_vm_func_clearscope(new_meta)
                 
-                ctx.script.SetFunc(self.name, __gml_method_real(new_meta, fn));
+                ctx.SetFunc(self.name, __gml_method_real(new_meta, fn));
             }
             else // bind it to the parent constructor
                 gml_vm_func_bind_selfscope(fn, ctx.scope)
@@ -2152,14 +2157,16 @@ function gml_parse_expr_leaf_node_primary(tokens)
         if !is_construct && !is_undefined(inherit_call)
             throw "Can't inherit on a non-constructor function"
         
-        __gml.gml_scopedepth ++;
+		// keep track of what functions are visible and where
+        __gml.gml_scopedepth ++ 
 		var blk = gml_parse_block(tokens);
 		__gml.gml_scopedepth --;
 		
 		var node = new gmlFunctionNode(name, arg_names, blk, is_construct, inherit_call, arg_optionals)
 		
+		// add it to the list of functions to be preinited so they can be reached before declaration
 		if (string_length(name) > 0 && __gml.gml_scopedepth == 0)
-			__gml.gml_functions[$ name] = node;
+			array_push(__gml.gml_functions, node);
 			
 		return node;
 	}
@@ -5105,8 +5112,6 @@ function gml_vm_builtin(varname)
 #region constructs
 function gmlVMScript() constructor
 {
-    self.functions = {}
-    
     self.blacklisted = {}
 
     static AddBlacklist = function ()
@@ -5143,23 +5148,7 @@ function gmlVMScript() constructor
     	return value;
     }
     
-    static SetFunc = function (name, func)
-    {
-        if struct_exists(self.functions, name)
-        	return;
-        	
-        self.functions[$ name] = func;
-    }
-    
-    static GetFunc = function (name)
-    {
-        return self.functions[$ name];
-    }
-    
-    static HasFunc = function (name)
-    {
-    	return struct_exists(self.functions, name)
-    }
+    self.function_table = []
 }
 
 function gmlVMContext(script, instance, inst_other, gmfunc = "<gml.gml>") constructor 
@@ -5196,12 +5185,33 @@ function gmlVMContext(script, instance, inst_other, gmfunc = "<gml.gml>") constr
         return self;
     }
     
+    // functions, not methods
+    self.functions = {}
+    
+    static SetFunc = function (name, func)
+    {
+        if struct_exists(self.functions, name)
+        	return;
+        	
+        self.functions[$ name] = func;
+    }
+    static GetFunc = function (name)
+    {
+        return self.functions[$ name];
+    }
+    static HasFunc = function (name)
+    {
+    	return struct_exists(self.functions, name)
+    }
+    
     static Extend = function (old_ctx)
     {
         if !is_instanceof(old_ctx, gmlVMContext)
             throw "Can't extend context without a context"
         
         self.locals = old_ctx.locals;
+        self.statics = old_ctx.statics;
+        self.functions = old_ctx.functions;
         return self;
     }
     
@@ -5210,9 +5220,9 @@ function gmlVMContext(script, instance, inst_other, gmfunc = "<gml.gml>") constr
     	if struct_exists(self.locals, v) return self.locals
         if struct_exists(self.statics, v) return self.statics
         if struct_exists(self.readonly, v) return self.readonly
+        if self.HasFunc(v) return self.functions;
         if variable_instance_exists(self.scope, v) return self.scope
         if variable_global_exists(v) return global;
-        if self.script.HasFunc(v) return self.script.functions;
         
         return undefined;
     }
@@ -5918,7 +5928,7 @@ function gml_parse(code)
     try 
     {
         __gml.gml_enums = {}
-        __gml.gml_functions = {}
+        __gml.gml_functions = []
         __gml.gml_scopedepth = 0;
         
         var AST = gml_parse_block(tokens, true).Fold()
@@ -5943,13 +5953,15 @@ function gml_vm(AST, _script = undefined, _self = self, _other = other)
 	static is_running = true;
 	
 	_script ??= new gmlVMScript()
+	_script.function_table = AST.functions;
+	
     var ctx = new gmlVMContext(_script, _self, _other)
     
-    // define top level functions
-    var funcnames = struct_get_names(AST.functions)
-    for (var i = 0; i < array_length(funcnames); i++)
+    // define top level functions in this current scope
+    var funcs = AST.functions
+    for (var i = 0; i < array_length(funcs); i++)
     {
-    	var funcname = funcnames[i], funcnode = AST.functions[$ funcname]
+    	var funcnode = funcs[i]
     	
     	gml_vm_expr(funcnode, ctx) // define it
     }
