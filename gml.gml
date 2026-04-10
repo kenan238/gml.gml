@@ -2481,8 +2481,12 @@ function gmlBlockNode(statements) : gmlNode() constructor
 	
 	static Fold = function ()
 	{
-		for (var i = 0; i < array_length(self.statements); i++)
+		var i = 0;
+		repeat array_length(self.statements)
+		{
 			self.statements[i] = self.statements[i].Fold();
+			i++
+		}
 			
 		return self;
 	}
@@ -5301,11 +5305,14 @@ function gml_vm_block(block, ctx)
     if !is_array(stats)
         throw $"gml_vm_block called on not an array {stats}"
     
-    for (var i = 0; i < array_length(stats); i++)
+    var i = 0
+    repeat array_length(stats)
     {
         var k = __gml_vm_node(stats[i], ctx)
         if !is_undefined(k)
             return k;
+            
+        i++
     }
 }
 
@@ -5329,8 +5336,11 @@ function __gml_vm_node(node, ctx)
     
     if is_array(node)
     {
-        for (var i = 0; i < array_length(node); i++)
-            __gml_vm_node(node[i], ctx)
+    	var i = 0;
+        repeat array_length(node)
+        {
+            __gml_vm_node(node[i++], ctx)
+        }
     	__gml_endprofile("Stmt")
     }
     else
@@ -5389,7 +5399,7 @@ function __gml_staticchain_find(top, varname)
 }
 function __gml_vm_access_checklegal(root, ctx)
 {
-    if is_struct(root) || root < 0
+    if is_struct(root) || (is_real(root) && root < 0)
         return;
         
 	if instance_exists(root)
@@ -5665,7 +5675,7 @@ function __gml_vm_fun(callinfo)
             ctx.MarkConstructor();
         ctx.statics = fn_meta.statics
         
-        for (var i = 0; i < array_length(fn_meta.arg_names); i++)
+        var i = 0; repeat array_length(fn_meta.arg_names)
         {
             var n = fn_meta.arg_names[i];
             var optional = fn_meta.arg_optionals[$ n];
@@ -5677,6 +5687,8 @@ function __gml_vm_fun(callinfo)
             	v = !is_undefined(optional) ? gml_vm_expr(optional, ctx) : undefined;
             
             ctx.SetVar(n, v, ctx.locals)
+            
+            i++;
         }
         
         // argument handling
@@ -5684,14 +5696,21 @@ function __gml_vm_fun(callinfo)
         
         // argument is not a real array ????
         var argument_array = []
-        for (var i = 0; i < arg_count; i++)
+        
+        i = 0; repeat arg_count
+        {
             argument_array[i] = argument[i + arg_offset];
+        	i++;
+        }
         
         ctx.SetVar("argument", argument_array, ctx.readonly)
         ctx.SetVar("argument_count", arg_count, ctx.readonly)
         
-        for (var i = 0; i <= 15; i++)
+        i = 0; repeat 16
+        {
             ctx.SetVar($"argument{i}", argument[i + arg_offset], ctx.readonly);
+            i++
+        }
         
         // bind to the static chain
         if fn_meta.is_constructor
@@ -5973,9 +5992,9 @@ function gml_vm(AST, _script = undefined, _self = self, _other = other)
     
     // define top level functions in this current scope
     var funcs = AST.functions
-    for (var i = 0; i < array_length(funcs); i++)
+    var i = 0; repeat array_length(funcs)
     {
-    	var funcnode = funcs[i]
+    	var funcnode = funcs[i++]
     	
     	gml_vm_expr(funcnode, ctx) // define it
     }
