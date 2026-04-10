@@ -840,7 +840,7 @@ function gmlTokenizer(consumer) constructor
 				self.Push([ self.PatternCheck("=", token_type.b_biggereq, ">", token_type.bit_rshift, "", token_type.biggerthan) ]); 
 				break;
 			case "<": 
-				self.Push([ self.PatternCheck("=", token_type.b_lesseq, "<", token_type.bit_lshift, "", token_type.lessthan) ]); 
+				self.Push([ self.PatternCheck("=", token_type.b_lesseq, "<", token_type.bit_lshift, ">", token_type.b_nequal, "", token_type.lessthan) ]); 
 				break;
 				
 			case "&": 
