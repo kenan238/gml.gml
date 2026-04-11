@@ -5071,7 +5071,7 @@ function __gml_call(meth, args, is_constructor = false)
     if __gml_is_gmlfunc_self(this_self)
     {
         var __s = self, __o = other;
-        array_insert(args, 0, { self: __s, other: __o, "_@callinfo": true })
+        array_insert(args, 0, { _self: __s, _other: __o, "_@callinfo": true })
     }
     
     if (!is_constructor)
@@ -5621,8 +5621,8 @@ function __gml_vm_fun(callinfo)
     // only accept valid call infos
     if !is_undefined(callinfo) && is_struct(callinfo) && struct_exists(callinfo, "_@callinfo")
     {
-        _self = callinfo.self;
-        _other = callinfo.other;
+        _self = callinfo._self;
+        _other = callinfo._other;
         arg_offset++;
     }
     
