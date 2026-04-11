@@ -966,14 +966,14 @@ function gmlNode() constructor
     		}
     		else if is_instanceof(value, gmlBlockNode)
     		{
-    			for (var i = 0; i < array_length(value.statements); i++)
-    				walk(value.statements[i])
+    			var i = 0; repeat (array_length(value.statements))
+    				walk(value.statements[i++])
     		}
     		else if is_struct(value) && !is_method(value)
     		{
     			var names = struct_get_names(value);
-    			for (var i = 0; i < array_length(names); i++)
-    				walk(value[$ names[i]])
+    			var i = 0; repeat array_length(names)
+    				walk(value[$ names[i++]])
     		}
     	}
     	
