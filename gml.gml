@@ -786,7 +786,7 @@ function gmlTokenizer(consumer) constructor
 	            break;
 			case "%": self.Push([ self.PatternCheck("=", token_type.modulo_equal, "", token_type.modulo) ]); break;
 			case ";": self.Push([token_type.semicolon]); break;
-			case ":": self.Push([token_type.colon]); break;
+			case ":": self.Push([ self.PatternCheck("=", token_type.equal, "", token_type.colon) ]); break;
 			case "#": 
 	            if (consumer.PeekMany(6) == "region" || consumer.PeekMany(9) == "endregion")
 	            {
