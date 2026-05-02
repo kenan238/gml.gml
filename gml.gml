@@ -25,7 +25,8 @@ You have to call gml_init() to initialize it.
 			
 -> gml_parse: This will return the parsed result from a given GML code string. This is basically the "compiled" code, and what
 			gets run by gml_vm. You'd usually call this function to parse a snippet once, and cache it somewhere to
-			run it multiple times.
+			run it multiple times. You can provide a struct containing macros along with their string value to replace in parsing, alongside
+			defining them normally in code which also works.
 	* Returns: gmlBlockNode or Error
 	
 -> gml_vm: This will actually execute the output of gml_parse, you can provide a "self" that will act as the current
@@ -574,6 +575,11 @@ function gmlTokenizer(consumer) constructor
 		return tok;
 	}
 	
+	static AddMacro = function (macroname, value)
+	{
+		self.macros[$ macroname] = value;
+	}
+	
 	static ParseString = function (ch, type = "normal")
 	{
 	    var sb = ""
@@ -818,7 +824,7 @@ function gmlTokenizer(consumer) constructor
 	                    macrostring += consumer.Consume();
 	                
 	                trace($"Registered {macroname}: {macrostring}")
-	                self.macros[$ macroname] = macrostring;
+	                self.AddMacro(macroname, macrostring)
 	                break;
 	            }
 	            self.Push([token_type.hash]); 
@@ -957,8 +963,13 @@ function gmlNode() constructor
     {
     	static walk = function (value)
     	{
+    		// prevent inception
+    		if is_struct(value) && variable_instance_get(value, "inside")
+    			return;
+    			
     		if (!visitor(value))
     			return;
+    			
     		if is_array(value)
     		{
     			for (var i = 0; i < array_length(value); i++)
@@ -971,9 +982,13 @@ function gmlNode() constructor
     		}
     		else if is_struct(value) && !is_method(value)
     		{
+    			value.inside = true;
+    			
     			var names = struct_get_names(value);
     			var i = 0; repeat array_length(names)
     				walk(value[$ names[i++]])
+    			
+    			value.inside = false;
     		}
     	}
     	
@@ -5953,11 +5968,22 @@ function gml_is_error(returned)
     return is_instanceof(returned, gmlError)
 }
 
-function gml_parse(code)
+function gml_parse(code, macros = {})
 {
-    var consumer = new gmlStringConsumer(code);
-    var tokens = new gmlTokenizer(consumer)
-    
+	var consumer = new gmlStringConsumer(code);
+	var tokens = new gmlTokenizer(consumer)
+	
+	// custom macros
+	if struct_names_count(macros) > 0
+	{
+		var macro_names = struct_get_names(macros);
+		for (var i = 0; i < array_length(macro_names); i++)
+		{
+			var macro_name = macro_names[i], macro_str = macros[$ macro_name]
+			tokens.AddMacro(macro_name, macro_str)
+		}
+	}
+	
     try 
     {
         __gml.gml_enums = {}
