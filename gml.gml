@@ -1543,7 +1543,7 @@ function gmlConditionalStatementNode(cond_expr, blk, type, elsebranch = undefine
     		self.elsebranch = self.elsebranch.Fold();
     		
     	if is_instanceof(self.cond_expr, gmlLeafNode) && !self.cond_expr.data
-    		return new gmlNode(); // kill useless conditionals
+    		return is_undefined(self.elsebranch) ? new gmlNode() : self.elsebranch; // kill useless conditionals and replace with possible else branch if available
     		
     	return self;
     }
