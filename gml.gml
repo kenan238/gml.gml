@@ -1541,7 +1541,7 @@ function gmlConditionalStatementNode(cond_expr, blk, type, elsebranch = undefine
     	
     	if !is_undefined(self.elsebranch)
     		self.elsebranch = self.elsebranch.Fold();
-    		
+        
     	if is_instanceof(self.cond_expr, gmlLeafNode) && !self.cond_expr.data
     		return is_undefined(self.elsebranch) ? new gmlNode() : self.elsebranch; // kill useless conditionals and replace with possible else branch if available
     		
@@ -2505,6 +2505,13 @@ function gmlBlockNode(statements) : gmlNode() constructor
 			
 		return self;
 	}
+    
+    static Execute = function (ctx)
+    {
+        var k = gml_vm_block(self, ctx);
+        if !is_undefined(k)
+            return k;
+    }
 }
 
 function gml_parse_block(tokens, top = false)
