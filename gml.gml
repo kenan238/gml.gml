@@ -1349,7 +1349,7 @@ function gmlCallNode(node, params) : gmlNode() constructor
 	{
 		var func = gml_vm_expr(self.node, ctx), is_new = self.is_new;
         
-        if ctx.script.IsBlacklisted(int64(func))
+        if ctx.script.IsBlacklisted(__gml_get_blacklist_index(func))
         	throw $"Can't call blacklisted function: {script_get_name(func)}"
         
         var funcself = method_get_self(func);
@@ -5135,7 +5135,7 @@ function gml_vm_builtin(varname)
     // try resolve assets
     var indx = struct_get(__gml.vm_cached_assets, varname)
     if !is_undefined(indx)
-        return int64(indx)
+        return __gml_get_blacklist_index(indx)
     
     // and constants
     if struct_exists(__gml.vm_constants, varname)
@@ -5144,7 +5144,7 @@ function gml_vm_builtin(varname)
     // last resort
     var asset = asset_get_index(varname)
     if asset != -1
-        return int64(asset);
+        return __gml_get_blacklist_index(asset);
     
     found = false;
 }
@@ -5160,7 +5160,7 @@ function gmlVMScript() constructor
     	{
     		var arg = argument[i]
     		if script_exists(arg) || object_exists(arg)
-    			self.blacklisted[$ int64(arg)] = true;
+    			self.blacklisted[$ __gml_get_blacklist_index(arg)] = true;
     		else
     			throw $"Cannot blacklist value: {arg}. Must be a script or object.";
     	}
@@ -5586,6 +5586,13 @@ function __gml_vm_set_accessor(value, ctx)
 	return value;
 }
 
+function __gml_get_blacklist_index(value)
+{
+    if is_method(value)
+        value = method_get_index(value)
+    return int64(value)
+}
+
 // resolvers
 function __gml_vm_get_access_func(how)
 {
@@ -5884,7 +5891,7 @@ function __gml_vm_expr_checkcall(func, values, ctx)
     if is(sc_name, "script_execute", "script_execute_ext", "method_call")
     {
     	var real_fn = values[0];
-    	if ctx.script.IsBlacklisted(int64(real_fn))
+    	if ctx.script.IsBlacklisted(__gml_get_blacklist_index(real_fn))
     	{
     		throw $"Can't call blacklisted function: {script_get_name(real_fn)}"
     	}
