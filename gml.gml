@@ -5358,7 +5358,7 @@ function gmlVMContext(script, instance, inst_other, gmfunc = "<gml.gml>") constr
     
     static GetVar = function (v, scope)
     {
-    	if !variable_instance_exists(scope, v)
+    	if !__gml_vm_is_valid_scope(scope) || !variable_instance_exists(scope, v)
     		throw $"No such variable called {v}"
     		
     	return variable_instance_get(scope, v);
@@ -5711,7 +5711,7 @@ function __gml_vm_set_access_func(how)
 
 function __gml_vm_is_valid_scope(scope)
 {
-	return is_struct(scope) || instance_exists(scope)
+	return is_struct(scope) || instance_exists(scope) || typeof(scope) == "struct"
 }
 
 function gml_vm_func_bind_selfscope(func, scope)
@@ -6105,7 +6105,7 @@ function gml_parse(code, macros = {})
         var last_pos = tokens.next_token[2]
         trace($"gml_run: compile error at line {last_pos.line} column {last_pos.column}: {error}")
         
-        return new gmlError(last_pos, error);
+        return new gmlError(error, last_pos);
     }
     finally
     {
@@ -6154,7 +6154,7 @@ function gml_vm(AST, _script = undefined, _self = self, _other = other)
         trace($"gml_run: runtime error at line {last_pos.line} column {last_pos.column}: {error}")
         
         is_running = false;
-        return new gmlError(last_pos, error);
+        return new gmlError(error, last_pos);
     }
 }; gml_vm.is_running = false;
 
